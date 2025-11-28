@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+
+    <persistence-unit name="FileServerPU">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+
+        <!-- ENTIDADES -->
+        <class>model.Usuario</class>
+
+        <properties>
+
+            <!-- JDBC (SQLite) -->
+            <property name="jakarta.persistence.jdbc.url" value="jdbc:sqlite:fileserver.db"/>
+            <property name="jakarta.persistence.jdbc.driver" value="org.sqlite.JDBC"/>
+
+            <!-- Dialeto correto (Hibernate 6) -->
+            <property name="hibernate.dialect" value="org.hibernate.community.dialect.SQLiteDialect"/>
+
+            <!-- Criar tabela se não existir -->
+            <property name="hibernate.hbm2ddl.auto" value="update"/>
+
+            <!-- Logs SQL -->
+            <property name="hibernate.show_sql" value="true"/>
+            <property name="hibernate.format_sql" value="true"/>
+
+        </properties>
+    </persistence-unit>
+</persistence>
