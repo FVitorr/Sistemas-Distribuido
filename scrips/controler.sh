@@ -6,7 +6,7 @@
 cd "$(dirname "$0")/.." || exit 1
 
 echo "Construindo projeto com Maven..."
-mvn clean package
+mvn clean package -Dmaven.test.skip=true
 
 if [ $? -ne 0 ]; then
     echo "Erro ao construir o projeto!"

@@ -2,6 +2,7 @@ package server;
 
 import org.jgroups.Address;
 import org.jgroups.JChannel;
+import org.jgroups.Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -16,23 +17,27 @@ class ControleServerTest {
 
     private ControleServer controle;
     private DadosServer dadosMock;
-    private JChannel canalMock;
+    private JChannel canalClusterMock;
+    private JChannel canalRPCMock;
+    private Address liderMock;
 
     @BeforeEach
     void setup() throws Exception {
         dadosMock = mock(DadosServer.class);
-        canalMock = mock(JChannel.class);
-        Address addrMock = mock(Address.class);
-        when(canalMock.getAddress()).thenReturn(addrMock);
+        canalClusterMock = mock(JChannel.class);
+        canalRPCMock = mock(JChannel.class);
+        liderMock = mock(Address.class);
+
+        when(canalClusterMock.getAddress()).thenReturn(liderMock);
 
         controle = new ControleServer(dadosMock) {
             {
-                canal = canalMock;
-                lider = canal.getAddress();
+                this.canalCluster = canalClusterMock;
+                this.canalRPC = canalRPCMock;
+                this.lider = liderMock;
             }
         };
     }
-
 
     @Test
     void testListarArquivos() {
@@ -53,12 +58,11 @@ class ControleServerTest {
 
         assertTrue(ok);
         verify(dadosMock, times(1)).salvarArquivo("arquivo.txt", conteudo);
-        verify(canalMock, atLeastOnce()).send(any());
+        verify(canalClusterMock, atLeastOnce()).send(any(Message.class));
     }
 
-
     @Test
-    void testUploadFalha()  {
+    void testUploadFalha() throws Exception {
         byte[] conteudo = "conteudo".getBytes();
         when(dadosMock.salvarArquivo("arquivo.txt", conteudo)).thenReturn(false);
 
@@ -66,9 +70,8 @@ class ControleServerTest {
 
         assertFalse(ok);
         verify(dadosMock, times(1)).salvarArquivo("arquivo.txt", conteudo);
-        // Não verifica canal.send(), pois liberarLock sempre envia a mensagem
+        verify(canalClusterMock, atLeastOnce()).send(any(Message.class)); // liberarLock envia sempre
     }
-
 
     @Test
     void testDownload() {
@@ -90,7 +93,6 @@ class ControleServerTest {
 
         String hash = controle.gerarHashGlobal();
 
-        // Validar hash manualmente
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         md.update(file1);
         md.update(file2);

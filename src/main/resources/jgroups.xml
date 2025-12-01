@@ -2,31 +2,23 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="http://www.jgroups.org/schema/jgroups.xsd">
 
+    <UDP bind_addr="127.0.0.1" mcast_port="45588" />
 
-<UDP/>
-
-    <!-- descoberta -->
     <PING/>
 
-    <!-- detecção de falhas -->
     <FD_SOCK/>
     <FD_ALL timeout="8000"/>
     <VERIFY_SUSPECT/>
 
-    <!-- ordenação e envio garantido -->
     <pbcast.NAKACK2/>
     <UNICAST3/>
     <pbcast.STABLE/>
 
-    <!-- gerenciamento do cluster -->
     <pbcast.GMS/>
 
-    <!-- ordenação total (ideal para lock distribuído) -->
     <SEQUENCER/>
 
-    <!-- fragmentação: necessário para arquivos grandes -->
     <FRAG4/>
 
-    <!-- controle de congestão -->
     <MFC/>
 </config>

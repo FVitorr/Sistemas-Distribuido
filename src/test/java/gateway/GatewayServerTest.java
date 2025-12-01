@@ -1,11 +1,14 @@
 package gateway;
 
-import database.UsuarioDAO;
 import model.Usuario;
+import org.jgroups.Address;
+import org.jgroups.blocks.MethodCall;
+import org.jgroups.blocks.RequestOptions;
+import org.jgroups.blocks.ResponseMode;
+import org.jgroups.blocks.RpcDispatcher;
+import org.jgroups.util.RspList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import server.ControleService;
 
 import java.rmi.RemoteException;
 import java.util.Arrays;
@@ -16,76 +19,116 @@ import static org.mockito.Mockito.*;
 
 class GatewayServerTest {
 
-    private UsuarioDAO usuarioDAO;
-    private ControleService controleService;
     private GatewayServer gateway;
+    private RpcDispatcher dispatcherMock;
+    private Address servidorMock;
 
     @BeforeEach
     void setup() throws Exception {
-        // Mock do DAO e do ControleService
-        usuarioDAO = mock(UsuarioDAO.class);
-        controleService = mock(ControleService.class);
+        // Mock do dispatcher e servidor
+        dispatcherMock = mock(RpcDispatcher.class);
+        servidorMock = mock(Address.class);
 
-        // Criar uma classe anônima de GatewayServer que usa os mocks
-        gateway = new GatewayServer(usuarioDAO, controleService);
+        // Instancia GatewayServer com dispatcher mockado
+        gateway = new GatewayServer() {
+            {
+                this.dispatcher = dispatcherMock;
+                this.servidoresAtivos.clear();
+                this.servidoresAtivos.add(servidorMock);
+            }
+
+            @Override
+            protected void log(String msg) {
+                // ignora logs durante teste
+            }
+        };
+    }
+
+    // Helper para mockar RspList
+    private RspList<Object> criarRspList(Object retorno) {
+        RspList<Object> rsp = mock(RspList.class);
+        when(rsp.isEmpty()).thenReturn(false);
+        when(rsp.isReceived(servidorMock)).thenReturn(true);
+        when(rsp.getValue(servidorMock)).thenReturn(retorno);
+        return rsp;
     }
 
     @Test
-    void testLoginSucesso() throws RemoteException {
-        Usuario user = new Usuario("joao", "1234");
-        when(usuarioDAO.buscarPorUsername("joao")).thenReturn(user);
+    void testLoginSucesso() throws Exception {
+        when(dispatcherMock.callRemoteMethods(
+                eq(List.of(servidorMock)),
+                any(MethodCall.class),
+                any(RequestOptions.class)
+        )).thenReturn(criarRspList(true));
 
         assertTrue(gateway.login("joao", "1234"));
     }
 
     @Test
-    void testLoginFalhaSenha() throws RemoteException {
-        Usuario user = new Usuario("joao", "1234");
-        when(usuarioDAO.buscarPorUsername("joao")).thenReturn(user);
+    void testLoginFalha() throws Exception {
+        when(dispatcherMock.callRemoteMethods(
+                eq(List.of(servidorMock)),
+                any(MethodCall.class),
+                any(RequestOptions.class)
+        )).thenReturn(criarRspList(false));
 
         assertFalse(gateway.login("joao", "senhaerrada"));
     }
 
     @Test
-    void testLoginUsuarioNaoExiste() throws RemoteException {
-        when(usuarioDAO.buscarPorUsername("maria")).thenReturn(null);
-
-        assertFalse(gateway.login("maria", "1234"));
-    }
-
-    @Test
-    void testListarArquivos() throws RemoteException {
-        List<String> arquivos = Arrays.asList("teste.txt", "foto.png");
-        when(controleService.listarArquivos()).thenReturn(arquivos);
+    void testListarArquivos() throws Exception {
+        List<String> arquivos = Arrays.asList("a.txt", "b.txt");
+        when(dispatcherMock.callRemoteMethods(
+                eq(List.of(servidorMock)),
+                argThat(call -> call.getName().equals("listarArquivos")),
+                any(RequestOptions.class)
+        )).thenReturn(criarRspList(arquivos));
 
         List<String> resultado = gateway.listarArquivos();
         assertEquals(arquivos, resultado);
     }
 
     @Test
-    void testUploadEDownload() throws RemoteException {
-        byte[] conteudo = "conteudo do arquivo".getBytes();
+    void testUploadEDownload() throws Exception {
+        byte[] conteudo = "teste".getBytes();
 
-        when(controleService.upload("arquivo.txt", conteudo)).thenReturn(true);
-        when(controleService.download("arquivo.txt")).thenReturn(conteudo);
+        // Mock upload
+        when(dispatcherMock.callRemoteMethods(
+                eq(List.of(servidorMock)),
+                argThat(call -> call.getName().equals("upload")),
+                any(RequestOptions.class)
+        )).thenReturn(criarRspList(true));
+
+        // Mock download
+        when(dispatcherMock.callRemoteMethods(
+                eq(List.of(servidorMock)),
+                argThat(call -> call.getName().equals("download")),
+                any(RequestOptions.class)
+        )).thenReturn(criarRspList(conteudo));
 
         assertTrue(gateway.upload("arquivo.txt", conteudo));
         assertArrayEquals(conteudo, gateway.download("arquivo.txt"));
     }
 
     @Test
-    void testGetSistemaHash() throws RemoteException {
-        when(controleService.gerarHashGlobal()).thenReturn("HASH123");
+    void testGetSistemaHash() throws Exception {
+        when(dispatcherMock.callRemoteMethods(
+                eq(List.of(servidorMock)),
+                argThat(call -> call.getName().equals("gerarHashGlobal")),
+                any(RequestOptions.class)
+        )).thenReturn(criarRspList("HASH123"));
 
         assertEquals("HASH123", gateway.getSistemaHash());
     }
 
     @Test
-    void testCriarConta() {
-        Usuario user = new Usuario("ana", "pass");
-        when(usuarioDAO.salvar(any(Usuario.class))).thenReturn(true);
+    void testCriarConta() throws Exception {
+        when(dispatcherMock.callRemoteMethods(
+                eq(List.of(servidorMock)),
+                argThat(call -> call.getName().equals("salvarUsuario")),
+                any(RequestOptions.class)
+        )).thenReturn(criarRspList(true));
 
         assertTrue(gateway.criarConta("ana", "pass"));
-        verify(usuarioDAO, times(1)).salvar(any(Usuario.class));
     }
 }

@@ -3,13 +3,15 @@ package model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.io.Serializable;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @Entity
 @Table(name = "usuarios")
-public class Usuario {
+public class Usuario  implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
