@@ -1,5 +1,6 @@
 package server;
 
+import database.JPAUtil;
 import database.UsuarioDAO;
 import model.Usuario;
 import java.io.*;
@@ -7,22 +8,33 @@ import java.nio.file.*;
 import java.util.*;
 
 public class DadosServer {
+
     private final String diretorio;
-    private final UsuarioDAO usuarioDAO;  // ✅ Adicione isto
+    private final UsuarioDAO usuarioDAO;
+
 
     public DadosServer() {
-        this("./storage");
+        this(
+                System.getProperty("app.storage", "./storage-" + UUID.randomUUID()),
+                System.getProperty("app.db", "usuarios-" + UUID.randomUUID() + ".db")
+        );
     }
 
-    public DadosServer(String diretorio) {
+    public DadosServer(String diretorio, String nomeBanco) {
         this.diretorio = diretorio;
-        this.usuarioDAO = new UsuarioDAO();  // ✅ Adicione isto
+        JPAUtil.init(nomeBanco);
+        this.usuarioDAO = new UsuarioDAO();
 
         try {
             Files.createDirectories(Paths.get(diretorio));
         } catch (IOException e) {
             System.err.println("Erro ao criar diretório: " + e.getMessage());
         }
+    }
+
+
+    public DadosServer(String diretorio) {
+        this(diretorio, "usuarios-" + UUID.randomUUID() + ".db");
     }
 
     public boolean salvarArquivo(String nome, byte[] conteudo) {
@@ -57,7 +69,6 @@ public class DadosServer {
         }
     }
 
-    // ✅ Novo método para salvar usuário
     public boolean salvarUsuario(Usuario usuario) {
         return usuarioDAO.salvar(usuario);
     }
@@ -65,5 +76,13 @@ public class DadosServer {
     public boolean validarUsuario(String username, String password) {
         Usuario usuario = usuarioDAO.buscarPorUsername(username);
         return usuario != null && usuario.getPassword().equals(password);
+    }
+
+    public List<Usuario> listarUsuarios() {
+        return usuarioDAO.listarTodos();
+    }
+
+    public Usuario buscarUsuarioPorUsername(String username) {
+        return usuarioDAO.buscarPorUsername(username);
     }
 }

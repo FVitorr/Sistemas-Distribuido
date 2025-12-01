@@ -30,7 +30,7 @@ class ControleServerTest {
 
         when(canalClusterMock.getAddress()).thenReturn(liderMock);
 
-        controle = new ControleServer(dadosMock) {
+        controle = new ControleServer() {
             {
                 this.canalCluster = canalClusterMock;
                 this.canalRPC = canalRPCMock;

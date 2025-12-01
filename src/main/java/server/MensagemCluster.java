@@ -23,6 +23,10 @@ public class MensagemCluster implements Serializable {
 
     private MensagemCluster() {}
 
+    public static void log(String msg) {
+        System.out.println("[MensagemCluster] " + msg);
+    }
+
     public static MensagemCluster upload(String arquivo, byte[] conteudo) {
         MensagemCluster m = new MensagemCluster();
         m.acao = Acao.UPLOAD;

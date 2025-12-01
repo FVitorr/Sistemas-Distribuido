@@ -27,6 +27,13 @@ public class Usuario  implements Serializable {
         this.username = username;
         this.password = password;
     }
-}
+
+    @Override
+    public String toString() {
+        return "Usuario{" +
+                "id=" + id +
+                ", username='" + username + '\'' +
+                '}';
+    }}
 
 

@@ -6,7 +6,7 @@ import org.jgroups.blocks.MethodCall;
 import org.jgroups.blocks.RequestOptions;
 import org.jgroups.blocks.ResponseMode;
 import org.jgroups.blocks.RpcDispatcher;
-import org.jgroups.util.RspList;
+import security.JwtUtil;
 
 import java.io.Closeable;
 import java.rmi.RemoteException;
@@ -32,6 +32,21 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
     private List<Address> servidoresAtivos;
     private AtomicInteger roundRobinIndex;
 
+    private String validarToken(String token) throws RemoteException {
+        if (token == null || token.isEmpty()) {
+            throw new RemoteException("Token não fornecido. Faça login primeiro.");
+        }
+
+        try {
+            // Valida e retorna o username do token
+            return JwtUtil.validarToken(token);
+
+        } catch (Exception e) {
+            log("⚠️ Token inválido ou expirado: " + e.getMessage());
+            throw new RemoteException("Token inválido ou expirado. Faça login novamente.", e);
+        }
+    }
+
     public GatewayServer() throws Exception {
         servidoresAtivos = new ArrayList<>();
         roundRobinIndex = new AtomicInteger(0);
@@ -44,13 +59,9 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
         canal.connect(CLUSTER);
 
         log("GATEWAY conectado ao cluster: " + canal.getAddress());
-        log("🔍 View inicial: " + canal.getView());
-
         // Criar dispatcher DEPOIS
         dispatcher = new RpcDispatcher(canal, null);
         dispatcher.setReceiver(this);
-
-        log("✅ Receiver registrado");
 
         atualizarListaServidores();
     }
@@ -134,18 +145,14 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
     // =========================================================================
 
     @Override
-    public boolean login(String username, String password) throws RemoteException {
-        log("📥 LOGIN: " + username);
-
-
+    public String login(String username, String password) throws RemoteException {
         try {
-            Boolean resultado = (Boolean) chamarComRetry(
+            return (String) chamarComRetry(
                     "login",
                     new Object[]{username, password},
                     new Class[]{String.class, String.class},
                     3
             );
-            return resultado != null && resultado;
 
         } catch (Exception e) {
             throw new RemoteException("Erro no login", e);
@@ -153,8 +160,10 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
     }
 
     @Override
-    public List<String> listarArquivos() throws RemoteException {
-        log("📥 LISTAR ARQUIVOS");
+    public List<String> listarArquivos(String token) throws RemoteException {
+        log(token);
+        String username = validarToken(token); // ✅ Valida token
+        log("📥 LISTAR ARQUIVOS (user: " + username + ")");
 
         try {
             return (List<String>) chamarComRetry(

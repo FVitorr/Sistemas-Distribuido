@@ -11,11 +11,16 @@ public class ClienteUI {
 
     private GatewayService gateway;
     private Scanner scanner = new Scanner(System.in);
+    private String tokenJWT = null;
+
 
     public void start() {
         conectarComGateway();
-        menuInicial();
-        realizarLogin();
+        boolean r;
+        do {
+            menuInicial();
+            r = realizarLogin();
+        } while (!r);
         menuPrincipal();
     }
 
@@ -71,25 +76,50 @@ public class ClienteUI {
         }
     }
 
-    private void realizarLogin() {
-        boolean ok = false;
+    private boolean realizarLogin() {
+        System.out.println("\n=== LOGIN ===");
 
-        while (!ok) {
-            System.out.print("\nUsuário: ");
-            String username = scanner.nextLine();
+        System.out.print("Usuário: ");
+        String username = scanner.nextLine();
 
-            System.out.print("Senha: ");
-            String password = scanner.nextLine();
-
-            try {
-                ok = gateway.login(username, password);
-                if (!ok) System.out.println("Credenciais inválidas. Tente novamente.");
-            } catch (Exception e) {
-                System.out.println("Erro ao tentar logar: " + e.getMessage());
-            }
+        if (username.isBlank()) {
+            System.out.println("❌ Operação cancelada.");
+            return false;
         }
 
-        System.out.println("Login realizado com sucesso!");
+        System.out.print("Senha: ");
+        String password = scanner.nextLine();
+
+        if (password.isBlank()) {
+            System.out.println("❌ Operação cancelada.");
+            return false;
+        }
+
+        try {
+            System.out.print("🔄 Autenticando...");
+
+            // ✅ Login agora retorna o token JWT
+            tokenJWT = gateway.login(username, password);
+
+            if (tokenJWT != null && !tokenJWT.isEmpty()) {
+                System.out.println("\r✅ Login realizado com sucesso!");
+                System.out.println("🔐 Token JWT recebido (válido por 24h)");
+                return true;
+            } else {
+                System.out.println("\r❌ Credenciais inválidas.");
+                return false;
+            }
+
+        } catch (Exception e) {
+            System.out.println("\r❌ Erro ao tentar logar: " + e.getMessage());
+
+            // Se o erro for relacionado ao token, limpa
+            if (e.getMessage().contains("Token") || e.getMessage().contains("token")) {
+                tokenJWT = null;
+            }
+
+            return false;
+        }
     }
 
     private void menuPrincipal() {
@@ -117,7 +147,7 @@ public class ClienteUI {
 
     private void listarArquivos() {
         try {
-            List<String> arquivos = gateway.listarArquivos();
+            List<String> arquivos = gateway.listarArquivos(tokenJWT);
             System.out.println("\nArquivos disponíveis:");
             arquivos.forEach(System.out::println);
         } catch (Exception e) {

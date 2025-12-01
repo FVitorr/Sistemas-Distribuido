@@ -4,6 +4,7 @@ import model.Usuario;
 import org.jgroups.*;
 import org.jgroups.blocks.RpcDispatcher;
 import org.jgroups.util.Util;
+import security.JwtUtil;
 
 import java.io.*;
 import java.security.MessageDigest;
@@ -32,8 +33,15 @@ public class ControleServer implements Receiver, Closeable {
 
     protected Address lider;
 
+    public static class EstadoCluster implements Serializable {
+        public Map<String, Long> metadata;
+        public Map<String, byte[]> arquivos;
+        public List<Usuario> usuarios;
+    }
+
+
     public ControleServer(DadosServer dados) throws Exception {
-        this.dados = dados;
+        this.dados = new DadosServer();  // único para este servidor
 
         // 1) Conectar no cluster real
         canalCluster = new JChannel("jgroups.xml");
@@ -71,10 +79,16 @@ public class ControleServer implements Receiver, Closeable {
     // -------------------------------------------------------------------------
     public boolean isBackend() { return true; }
 
-    public boolean login(String username, String password) {
-        log("🔍 LOGIN solicitado (RPC) no servidor " + canalRPC.getAddress() + ": " + username);
-        return dados.validarUsuario(username, password);
+    public String login(String username, String password) throws Exception {
+        Usuario user = dados.buscarUsuarioPorUsername(username);
+
+        if (user == null || !user.getPassword().equals(password))
+            return null;
+
+        // Gerar JWT
+        return JwtUtil.gerarToken(username);
     }
+
 
     public List<String> listarArquivos() {
         log("LISTAR ARQUIVOS solicitado (RPC)");
@@ -134,7 +148,6 @@ public class ControleServer implements Receiver, Closeable {
 
     public synchronized boolean salvarUsuario(Usuario usuario) {
         try {
-            log("SALVAR USUÁRIO solicitado (RPC): " + usuario.getUsername());
             boolean ok = dados.salvarUsuario(usuario);
             if (!ok) {
                 log("ERRO ao salvar usuário localmente");
@@ -142,7 +155,7 @@ public class ControleServer implements Receiver, Closeable {
             }
             MensagemCluster msg = MensagemCluster.salvarUsuario(usuario);
             canalCluster.send(new ObjectMessage(null, msg));
-            log("USUÁRIO salvo e replicado: " + usuario.getUsername());
+            log("Usuario salvo e replicado: " + usuario.getUsername());
             return true;
         } catch (Exception e) {
             log("ERRO AO SALVAR USUÁRIO: " + e.getMessage());
@@ -170,7 +183,6 @@ public class ControleServer implements Receiver, Closeable {
             case LOCK_RELEASE -> processarLiberacaoDeLock(m.arquivo);
             case SALVAR_USUARIO -> aplicarSalvarUsuarioCluster(m);
             case REGISTER_RPC_ADDRESS -> {
-                // outro servidor anunciou seu endereço RPC
                 log("Recebido registro RPC de " + m.rpcAddress);
             }
         }
@@ -180,10 +192,13 @@ public class ControleServer implements Receiver, Closeable {
     public void viewAccepted(View view) {
         log("═══════════════════════════════════════");
         log("NOVA VIEW DO CLUSTER: " + view);
+
         Address novoLider = view.getCreator();
         boolean liderMudou = (lider == null || !lider.equals(novoLider));
         lider = novoLider;
+
         if (liderMudou) log(">>> LÍDER DO CLUSTER: " + lider);
+
         log("MEMBROS ATIVOS NO CLUSTER:");
         for (int i = 0; i < view.getMembers().size(); i++) {
             Address addr = view.getMembers().get(i);
@@ -191,25 +206,144 @@ public class ControleServer implements Receiver, Closeable {
             String eu = addr.equals(canalCluster.getAddress()) ? " [EU]" : "";
             log("  [" + i + "] " + addr + tipo + eu);
         }
+
         log("═══════════════════════════════════════");
+
+        // 🔥 NOVO MEMBRO ENTRANDO → PUXA ESTADO DO CLUSTER
+        try {
+            if (!souLider()) {   // se não sou o líder, sou nó novo ou secundário
+                log("Sou novo membro. Solicitando estado ao líder...");
+                canalCluster.getState(null, 5000); // pega estado completo
+                log("Estado recebido com sucesso!");
+            }
+        } catch (Exception e) {
+            log("ERRO ao solicitar estado: " + e.getMessage());
+        }
     }
+
 
     @Override
     public void getState(OutputStream out) throws Exception {
-        log("Enviando estado para novo membro...");
+        log("Enviando estado completo para novo membro (estado incremental)...");
+
+        EstadoCluster estado = new EstadoCluster();
+
+        // 1) Metadata (copia)
+        estado.metadata = new HashMap<>();
         synchronized (metadata) {
-            Util.objectToStream(metadata, new DataOutputStream(out));
+            estado.metadata.putAll(metadata);
         }
+
+        // 2) Arquivos: somente os existentes localmente
+        estado.arquivos = new HashMap<>();
+        for (String nome : estado.metadata.keySet()) {
+            try {
+                byte[] conteudo = dados.lerArquivo(nome);
+                // pode haver caso de arquivo não existir fisicamente (ignore nesses casos)
+                if (conteudo != null) estado.arquivos.put(nome, conteudo);
+            } catch (Exception e) {
+                log("Erro ao ler arquivo para estado: " + nome + " -> " + e.getMessage());
+            }
+        }
+
+        // 3) Usuários: pega lista de usuários do DadosServer
+        try {
+            // dados.listarUsuarios() deve retornar List<Usuario>
+            estado.usuarios = dados.listarUsuarios();
+            if (estado.usuarios == null) estado.usuarios = Collections.emptyList();
+        } catch (NoSuchMethodError | AbstractMethodError err) {
+            // caso DadosServer não tenha listarUsuarios(), envia lista vazia
+            log("DadosServer não expõe listarUsuarios(); enviando lista vazia.");
+            estado.usuarios = Collections.emptyList();
+        } catch (Exception e) {
+            log("Erro obtendo usuários para estado: " + e.getMessage());
+            estado.usuarios = Collections.emptyList();
+        }
+
+        // Serializa tudo
+        Util.objectToStream(estado, new DataOutputStream(out));
+        log("Estado (completo) enviado: " + estado.metadata.size() + " metadados, "
+                + estado.arquivos.size() + " arquivos, " + estado.usuarios.size() + " usuários.");
     }
 
     @Override
     public void setState(InputStream in) throws Exception {
-        log("Recebendo estado do cluster...");
-        Map<String, Long> m = (Map<String, Long>) Util.objectFromStream(new DataInputStream(in));
-        metadata.clear();
-        metadata.putAll(m);
-        log("ESTADO RESTAURADO: " + metadata.size() + " arquivos.");
+        log("Recebendo estado completo do cluster (aplicação incremental)...");
+        EstadoCluster estado = (EstadoCluster) Util.objectFromStream(new DataInputStream(in));
+
+        if (estado == null) {
+            log("Estado recebido é nulo — nada a aplicar.");
+            return;
+        }
+
+        // 1) Aplicar metadata (merge incremental)
+        synchronized (metadata) {
+            for (Map.Entry<String, Long> e : estado.metadata.entrySet()) {
+                String nome = e.getKey();
+                Long tamanhoRemoto = e.getValue();
+                Long local = metadata.get(nome);
+
+                // se não existir localmente ou tamanho diferente, marca para baixar (aplicado abaixo)
+                if (local == null || !local.equals(tamanhoRemoto)) {
+                    metadata.put(nome, tamanhoRemoto); // marcar novo/atualizado
+                }
+            }
+        }
+
+        // 2) Aplicar arquivos: só grava os que ainda não existem ou que diferem
+        int arquivosAplicados = 0;
+        for (Map.Entry<String, byte[]> e : estado.arquivos.entrySet()) {
+            String nome = e.getKey();
+            byte[] conteudo = e.getValue();
+
+            try {
+                // verifica se arquivo existe localmente e tem mesmo tamanho
+                byte[] localConteudo = dados.lerArquivo(nome);
+                boolean precisaSalvar = false;
+                if (localConteudo == null) {
+                    precisaSalvar = true;
+                } else if (localConteudo.length != (conteudo == null ? 0 : conteudo.length)) {
+                    precisaSalvar = true;
+                }
+
+                if (precisaSalvar) {
+                    dados.salvarArquivo(nome, conteudo);
+                    metadata.put(nome, (long) (conteudo == null ? 0 : conteudo.length));
+                    arquivosAplicados++;
+                }
+            } catch (Exception ex) {
+                log("Falha ao aplicar arquivo '" + nome + "': " + ex.getMessage());
+            }
+        }
+
+        // 3) Aplicar usuários: adiciona somente usuários que ainda não existem localmente
+        int usuariosAplicados = 0;
+        try {
+            for (Usuario u : estado.usuarios) {
+                try {
+                    // verificar existência por username
+                    if (dados.buscarUsuarioPorUsername(u.getUsername()) == null) {
+                        dados.salvarUsuario(u);
+                        usuariosAplicados++;
+                    }
+                } catch (NoSuchMethodError | AbstractMethodError nsme) {
+                    // Se DadosServer não expõe método de busca, tentamos salvar e ignorar falhas por duplicidade
+                    try {
+                        dados.salvarUsuario(u);
+                        usuariosAplicados++;
+                    } catch (Exception ignore) {}
+                } catch (Exception ex) {
+                    log("Erro ao aplicar usuário '" + u.getUsername() + "': " + ex.getMessage());
+                }
+            }
+        } catch (NoSuchMethodError nm) {
+            log("DadosServer não implementa listar/buscar usuários — pulei aplicação de usuários.");
+        }
+
+        log("Estado aplicado: " + arquivosAplicados + " arquivos novos/atualizados, "
+                + usuariosAplicados + " usuários adicionados. Metadata total: " + metadata.size());
     }
+
 
     // -------------------------------------------------------------------------
     // REPLICAÇÃO handlers
@@ -224,8 +358,8 @@ public class ControleServer implements Receiver, Closeable {
 
     private void aplicarSalvarUsuarioCluster(MensagemCluster m) {
         synchronized (this) {
-            log("RECEBENDO replicação USUÁRIO: " + m.usuario.getUsername());
             dados.salvarUsuario(m.usuario);
+            log("REPLICAÇÂO USUÁRIO: " + m.usuario.toString());
         }
     }
 

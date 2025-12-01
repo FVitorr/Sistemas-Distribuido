@@ -6,9 +6,9 @@ import java.util.List;
 
 public interface GatewayService extends Remote {
 
-    boolean login(String username, String password) throws RemoteException;
+    String login(String username, String password) throws RemoteException;
 
-    List<String> listarArquivos() throws RemoteException;
+    List<String> listarArquivos(String token) throws RemoteException;
 
     boolean upload(String nomeArquivo, byte[] conteudo) throws RemoteException;
 
