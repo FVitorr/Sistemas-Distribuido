@@ -87,25 +87,22 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
             throw new RemoteException("Nenhum servidor disponível");
         }
 
-        // GET_FIRST retorna apenas a primeira resposta recebida
-        RequestOptions opts = new RequestOptions(ResponseMode.GET_FIRST, 5000);
+        log("🔧 Chamando método: " + nomeMetodo + " no servidor: " + servidor);
 
+        RequestOptions opts = new RequestOptions(ResponseMode.GET_FIRST, 5000);
         MethodCall call = new MethodCall(nomeMetodo, args, tipos);
 
-        // Passa apenas o endereço do servidor escolhido
-        RspList<Object> respostas = dispatcher.callRemoteMethods(
-                Collections.singletonList(servidor),
+        // ✅ USE callRemoteMethod (SINGULAR) para chamar apenas 1 servidor
+        Object resposta = dispatcher.callRemoteMethod(
+                servidor,  // ✅ Um endereço específico
                 call,
                 opts
         );
 
-        if (!respostas.isReceived(servidor)) {
-            throw new Exception("Servidor não respondeu: " + servidor);
-        }
+        log("📨 Resposta recebida de: " + servidor);
 
-        return respostas.getValue(servidor);
+        return resposta;
     }
-
 
     /**
      * Retry automático em caso de falha
