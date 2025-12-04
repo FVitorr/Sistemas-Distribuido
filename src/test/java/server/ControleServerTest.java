@@ -91,7 +91,7 @@ class ControleServerTest {
         when(dadosMock.lerArquivo("f1.txt")).thenReturn(file1);
         when(dadosMock.lerArquivo("f2.txt")).thenReturn(file2);
 
-        String hash = controle.gerarHashGlobal();
+        String hash = controle.gerarHashLocal();
 
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         md.update(file1);

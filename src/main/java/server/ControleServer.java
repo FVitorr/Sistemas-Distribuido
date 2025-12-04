@@ -125,23 +125,39 @@ public class ControleServer implements Receiver, Closeable {
         return dados.lerArquivo(nome);
     }
 
-    public String gerarHashGlobal() {
-        log("HASH GLOBAL solicitado (RPC)");
+    public String gerarHashLocal() {
+        log("🔐 HASH LOCAL solicitado (RPC)");
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            List<String> arquivos = listarArquivos();
-            Collections.sort(arquivos);
-            for (String f : arquivos) {
-                byte[] content = download(f);
-                if (content != null) md.update(content);
+
+            List<String> arquivos = dados.listarArquivos();
+            Collections.sort(arquivos); // ✅ Ordenação garante hash consistente
+
+            log("📊 Calculando hash de " + arquivos.size() + " arquivos...");
+
+            for (String nomeArquivo : arquivos) {
+                byte[] conteudo = dados.lerArquivo(nomeArquivo);
+
+                if (conteudo != null) {
+                    // Adiciona nome do arquivo ao hash (para detectar renomeações)
+                    md.update(nomeArquivo.getBytes());
+                    // Adiciona conteúdo ao hash
+                    md.update(conteudo);
+                }
             }
+
             byte[] digest = md.digest();
             StringBuilder sb = new StringBuilder();
-            for (byte b : digest) sb.append(String.format("%02x", b));
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+
             String hash = sb.toString();
-            log("HASH GLOBAL = " + hash);
+            log("✅ HASH LOCAL calculado: " + hash);
             return hash;
+
         } catch (Exception e) {
+            log("❌ ERRO ao calcular hash: " + e.getMessage());
             return "ERRO-HASH";
         }
     }
@@ -358,8 +374,28 @@ public class ControleServer implements Receiver, Closeable {
 
     private void aplicarSalvarUsuarioCluster(MensagemCluster m) {
         synchronized (this) {
-            dados.salvarUsuario(m.usuario);
-            log("REPLICAÇÂO USUÁRIO: " + m.usuario.toString());
+            log("📥 RECEBENDO replicação de USUÁRIO: " + m.usuario.getUsername());
+
+            try {
+                // Verifica se usuário já existe
+                Usuario existente = dados.buscarUsuarioPorUsername(m.usuario.getUsername());
+                if (existente != null) {
+                    log("⚠️ Usuário JÁ EXISTE localmente, pulando: " + m.usuario.getUsername());
+                    return;
+                }
+
+                // Salva o usuário replicado
+                boolean ok = dados.replicarUsuario(m.usuario);
+
+                if (ok) {
+                    log("✅ REPLICAÇÃO DE USUÁRIO aplicada: " + m.usuario.getUsername());
+                } else {
+                    log("❌ FALHA ao aplicar replicação de usuário: " + m.usuario.getUsername());
+                }
+            } catch (Exception e) {
+                log("❌ ERRO ao aplicar replicação de usuário: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
     }
 

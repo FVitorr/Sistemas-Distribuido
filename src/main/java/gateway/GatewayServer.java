@@ -161,7 +161,6 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
 
     @Override
     public List<String> listarArquivos(String token) throws RemoteException {
-        log(token);
         String username = validarToken(token); // ✅ Valida token
         log("📥 LISTAR ARQUIVOS (user: " + username + ")");
 
@@ -217,7 +216,7 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
 
         try {
             return (String) chamarComRetry(
-                    "gerarHashGlobal",
+                    "gerarHashLocal",
                     new Object[]{},
                     new Class[]{},
                     3

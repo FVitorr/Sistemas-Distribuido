@@ -73,6 +73,10 @@ public class DadosServer {
         return usuarioDAO.salvar(usuario);
     }
 
+    public boolean replicarUsuario(Usuario usuario) {
+        return usuarioDAO.replicarUsuario(usuario);
+    }
+
     public boolean validarUsuario(String username, String password) {
         Usuario usuario = usuarioDAO.buscarPorUsername(username);
         return usuario != null && usuario.getPassword().equals(password);

@@ -20,6 +20,42 @@ public class UsuarioDAO {
         }
     }
 
+    public boolean replicarUsuario(Usuario usuario) {
+        EntityManager em = JPAUtil.getEntityManager();
+        try {
+            System.out.println("[DadosServer] 🔄 Replicando usuário: " + usuario.getUsername() + " (ID: " + usuario.getId() + ")");
+
+            // Verifica se já existe
+            Usuario existente = buscarPorUsername(usuario.getUsername());
+            if (existente != null) {
+                System.out.println("[DadosServer] ⚠️ Usuário já existe, pulando replicação: " + usuario.getUsername());
+                return true; // Retorna true pois não é um erro
+            }
+
+            em.getTransaction().begin();
+
+            // ✅ merge() para objetos que já têm ID (vindos de replicação)
+            em.merge(usuario);
+
+            em.getTransaction().commit();
+
+            System.out.println("[DadosServer] ✅ Usuário replicado com sucesso: " + usuario.getUsername());
+            return true;
+
+        } catch (Exception e) {
+            System.err.println("[DadosServer] ❌ Erro ao replicar usuário: " + e.getMessage());
+            e.printStackTrace();
+
+            if (em.getTransaction().isActive()) {
+                em.getTransaction().rollback();
+            }
+            return false;
+
+        } finally {
+            em.close();
+        }
+    }
+
     public Usuario buscarPorUsername(String username) {
         EntityManager em = JPAUtil.getEntityManager();
         try {
