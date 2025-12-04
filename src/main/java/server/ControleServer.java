@@ -3,6 +3,7 @@ package server;
 import model.Usuario;
 import org.jgroups.*;
 import org.jgroups.blocks.RpcDispatcher;
+import org.jgroups.blocks.cs.ReceiverAdapter;
 import org.jgroups.util.Util;
 import security.JwtUtil;
 
@@ -54,14 +55,21 @@ public class ControleServer implements Receiver, Closeable {
 
         // dispatcher ligado no canalRPC (server responde RPCs aqui)
         dispatcher = new RpcDispatcher(canalRPC, this);
-        dispatcher.setReceiver(this);
+        dispatcher.setReceiver(new Receiver() {
+            @Override
+            public void receive(Message msg) {
+                // RPC não deveria nunca trazer MensagemCluster
+            }
+        });
+
+        //dispatcher.setReceiver(this);
 
         log("SERVIDOR conectado ao cluster: " + canalCluster.getAddress());
         log("SERVIDOR RPC ativo em: " + canalRPC.getAddress());
 
-        // opcional: anunciar meu endereço RPC via canalCluster (ajuda gateways que só leem view)
-        MensagemCluster reg = MensagemCluster.registerRpc(canalRPC.getAddress().toString());
-        canalCluster.send(new ObjectMessage(null, reg));
+//        // opcional: anunciar meu endereço RPC via canalCluster (ajuda gateways que só leem view)
+//        MensagemCluster reg = MensagemCluster.registerRpc(canalRPC.getAddress().toString());
+//        canalCluster.send(new ObjectMessage(null, reg));
 
         atualizarMetadataLocal();
     }
@@ -95,17 +103,20 @@ public class ControleServer implements Receiver, Closeable {
         return dados.listarArquivos();
     }
 
-    public synchronized boolean upload(String nome, byte[] conteudo) {
+    public boolean upload(String nome, byte[] conteudo) {
         try {
             log("UPLOAD solicitado (RPC): " + nome + " (" + conteudo.length + " bytes)");
             adquirirLock(nome);
 
             boolean ok = dados.salvarArquivo(nome, conteudo);
-            if (!ok) return false;
+            if (!ok) {
+                log("Falha ao gravar arquivo no disco: " + nome);
+                return false;
+            }
 
             metadata.put(nome, (long) conteudo.length);
 
-            // Replica para outros servidores via canalCluster
+            // replica para o cluster
             MensagemCluster msg = MensagemCluster.upload(nome, conteudo);
             canalCluster.send(new ObjectMessage(null, msg));
 
@@ -114,11 +125,13 @@ public class ControleServer implements Receiver, Closeable {
 
         } catch (Exception e) {
             log("ERRO NO UPLOAD: " + e.getMessage());
+            e.printStackTrace();
             return false;
         } finally {
             liberarLock(nome);
         }
     }
+
 
     public byte[] download(String nome) {
         log("DOWNLOAD solicitado (RPC): " + nome);
@@ -240,46 +253,73 @@ public class ControleServer implements Receiver, Closeable {
 
     @Override
     public void getState(OutputStream out) throws Exception {
-        log("Enviando estado completo para novo membro (estado incremental)...");
+        log("═══════════════════════════════════════");
+        log("📤 ENVIANDO ESTADO para novo membro...");
 
-        EstadoCluster estado = new EstadoCluster();
-
-        // 1) Metadata (copia)
-        estado.metadata = new HashMap<>();
-        synchronized (metadata) {
-            estado.metadata.putAll(metadata);
-        }
-
-        // 2) Arquivos: somente os existentes localmente
-        estado.arquivos = new HashMap<>();
-        for (String nome : estado.metadata.keySet()) {
-            try {
-                byte[] conteudo = dados.lerArquivo(nome);
-                // pode haver caso de arquivo não existir fisicamente (ignore nesses casos)
-                if (conteudo != null) estado.arquivos.put(nome, conteudo);
-            } catch (Exception e) {
-                log("Erro ao ler arquivo para estado: " + nome + " -> " + e.getMessage());
-            }
-        }
-
-        // 3) Usuários: pega lista de usuários do DadosServer
         try {
-            // dados.listarUsuarios() deve retornar List<Usuario>
-            estado.usuarios = dados.listarUsuarios();
-            if (estado.usuarios == null) estado.usuarios = Collections.emptyList();
-        } catch (NoSuchMethodError | AbstractMethodError err) {
-            // caso DadosServer não tenha listarUsuarios(), envia lista vazia
-            log("DadosServer não expõe listarUsuarios(); enviando lista vazia.");
-            estado.usuarios = Collections.emptyList();
-        } catch (Exception e) {
-            log("Erro obtendo usuários para estado: " + e.getMessage());
-            estado.usuarios = Collections.emptyList();
-        }
+            EstadoCluster estado = new EstadoCluster();
 
-        // Serializa tudo
-        Util.objectToStream(estado, new DataOutputStream(out));
-        log("Estado (completo) enviado: " + estado.metadata.size() + " metadados, "
-                + estado.arquivos.size() + " arquivos, " + estado.usuarios.size() + " usuários.");
+            // 1️⃣ Metadata
+            log("📊 Coletando metadata...");
+            estado.metadata = new HashMap<>();
+            synchronized (metadata) {
+                estado.metadata.putAll(metadata);
+            }
+            log("   ✓ " + estado.metadata.size() + " metadados coletados");
+
+            // 2️⃣ Arquivos
+            log("📁 Coletando arquivos...");
+            estado.arquivos = new HashMap<>();
+            for (String nome : estado.metadata.keySet()) {
+                try {
+                    byte[] conteudo = dados.lerArquivo(nome);
+                    if (conteudo != null) {
+                        estado.arquivos.put(nome, conteudo);
+                        log("   ✓ Arquivo: " + nome + " (" + conteudo.length + " bytes)");
+                    } else {
+                        log("   ⚠ Arquivo não encontrado: " + nome);
+                    }
+                } catch (Exception e) {
+                    log("   ❌ Erro ao ler arquivo '" + nome + "': " + e.getMessage());
+                }
+            }
+            log("   ✓ " + estado.arquivos.size() + " arquivos coletados");
+
+            // 3️⃣ Usuários
+            log("👥 Coletando usuários...");
+            try {
+                estado.usuarios = dados.listarUsuarios();
+                if (estado.usuarios == null) {
+                    estado.usuarios = Collections.emptyList();
+                }
+                log("   ✓ " + estado.usuarios.size() + " usuários coletados");
+
+                for (Usuario u : estado.usuarios) {
+                    log("   ✓ Usuário: " + u.getUsername());
+                }
+
+            } catch (Exception e) {
+                log("   ⚠ Erro ao coletar usuários: " + e.getMessage());
+                estado.usuarios = Collections.emptyList();
+            }
+
+            // 4️⃣ Serializar e enviar
+            log("📦 Serializando estado...");
+            DataOutputStream dos = new DataOutputStream(out);
+            Util.objectToStream(estado, dos);
+            dos.flush();
+
+            log("✅ ESTADO ENVIADO COM SUCESSO!");
+            log("   Resumo: " + estado.metadata.size() + " metadados, "
+                    + estado.arquivos.size() + " arquivos, "
+                    + estado.usuarios.size() + " usuários");
+            log("═══════════════════════════════════════");
+
+        } catch (Exception e) {
+            log("❌ ERRO CRÍTICO ao enviar estado: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
 
     @Override
@@ -467,7 +507,7 @@ public class ControleServer implements Receiver, Closeable {
     private void atualizarMetadataLocal() {
         for (String f : dados.listarArquivos()) {
             byte[] content = dados.lerArquivo(f);
-            metadata.put(f, content == null ? 0L : (long) content.length);
+            metadata.put(f, Long.valueOf(content == null ? 0L : (long) content.length));
         }
         log("Metadata local carregada: " + metadata.size() + " arquivos.");
     }
