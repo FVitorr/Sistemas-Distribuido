@@ -352,6 +352,16 @@ public class ControleServer implements Receiver, Closeable {
             if (ok) {
                 metadata.remove(nameFile);
                 log("✅ Arquivo apagado: " + nameFile);
+
+                try {
+                    MensagemCluster msg = MensagemCluster.apagarArquivo(nameFile);
+                    // Envia para todos (null) -> broadcast
+                    canalCluster.send(new ObjectMessage(null, msg));
+                    log("📤 Mensagem de APAGAR enviada ao cluster: " + nameFile);
+                } catch (Exception e) {
+                    log("❌ Erro ao enviar mensagem de APAGAR ao cluster: " + e.getMessage());
+                    // Não falha a operação local só por causa da mensagem, mas registra
+                }
             } else {
                 log("⚠️ Falha ao apagar arquivo: " + nameFile);
             }
@@ -504,6 +514,7 @@ public class ControleServer implements Receiver, Closeable {
             case CONFIRMACAO_TRANSACAO -> receberConfirmacaoTransacao(msg, m);
             case ROLLBACK_UPLOAD -> aplicarRollbackUpload(m);
             case CONFIRMACAO_UPLOAD -> receberConfirmacaoUpload(msg, m);
+            case APAGAR_ARQUIVO -> aplicarApagarCluster(m);
         }
     }
 
@@ -616,6 +627,23 @@ public class ControleServer implements Receiver, Closeable {
         }
     }
 
+    private void aplicarApagarCluster(MensagemCluster m) {
+        synchronized (this) {
+            String nome = m.arquivo;
+            log("📥 RECEBENDO APAGAR do cluster: " + nome + " (origem=" + m.serverOrigin + ")");
+            try {
+                boolean ok = dados.deletarArquivo(nome);
+                metadata.remove(nome);
+                if (ok) {
+                    log("✅ Arquivo removido via cluster: " + nome);
+                } else {
+                    log("⚠️ Arquivo não encontrado/no deletado via cluster: " + nome);
+                }
+            } catch (Exception e) {
+                log("❌ Erro ao aplicar APAGAR do cluster: " + e.getMessage());
+            }
+        }
+    }
 
     private void aplicarSalvarUsuarioCluster(MensagemCluster m) {
         synchronized (this) {

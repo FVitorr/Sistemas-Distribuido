@@ -19,7 +19,8 @@ public class MensagemCluster implements Serializable {
         SALVAR_USUARIO,
         ROLLBACK_USUARIO,
         CONFIRMACAO_TRANSACAO,
-        REGISTER_RPC_ADDRESS
+        REGISTER_RPC_ADDRESS,
+        APAGAR_ARQUIVO,
     }
 
     public Acao acao;
@@ -72,6 +73,13 @@ public class MensagemCluster implements Serializable {
         m.acao = Acao.ROLLBACK_UPLOAD;
         m.arquivo = arquivo;
         m.uploadId = uploadId;
+        return m;
+    }
+
+    public static MensagemCluster apagarArquivo(String nameFile) {
+        MensagemCluster m = new MensagemCluster();
+        m.acao = Acao.APAGAR_ARQUIVO;
+        m.arquivo = nameFile;
         return m;
     }
 
