@@ -201,6 +201,22 @@
                             <finalName>controle</finalName>
                         </configuration>
                     </execution>
+
+                    <execution>
+                        <id>client-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <archive>
+                                <manifest>
+                                    <mainClass>client.Main</mainClass>
+                                </manifest>
+                            </archive>
+                            <finalName>client</finalName>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
 

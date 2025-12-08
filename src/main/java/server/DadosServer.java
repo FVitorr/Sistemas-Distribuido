@@ -12,7 +12,6 @@ public class DadosServer {
     private final String diretorio;
     private final UsuarioDAO usuarioDAO;
 
-
     public DadosServer() {
         this(
                 System.getProperty("app.storage", "./storage-" + UUID.randomUUID()),
@@ -32,10 +31,13 @@ public class DadosServer {
         }
     }
 
-
     public DadosServer(String diretorio) {
         this(diretorio, "usuarios-" + UUID.randomUUID() + ".db");
     }
+
+    // =========================================================================
+    //  MÉTODOS DE ARQUIVOS
+    // =========================================================================
 
     public boolean salvarArquivo(String nome, byte[] conteudo) {
         try {
@@ -69,23 +71,49 @@ public class DadosServer {
         }
     }
 
+    // =========================================================================
+    //  MÉTODOS DE USUÁRIOS
+    // =========================================================================
+
+    /**
+     * Salva novo usuário (usa persist)
+     */
     public boolean salvarUsuario(Usuario usuario) {
         return usuarioDAO.salvar(usuario);
     }
 
+    /**
+     * Replica usuário de outro servidor (usa merge)
+     */
     public boolean replicarUsuario(Usuario usuario) {
         return usuarioDAO.replicarUsuario(usuario);
     }
 
+    /**
+     * Deleta usuário (usado para rollback de transações)
+     */
+    public boolean deletarUsuario(String username) {
+        return usuarioDAO.deletar(username);
+    }
+
+    /**
+     * Valida credenciais de login
+     */
     public boolean validarUsuario(String username, String password) {
         Usuario usuario = usuarioDAO.buscarPorUsername(username);
         return usuario != null && usuario.getPassword().equals(password);
     }
 
+    /**
+     * Lista todos os usuários
+     */
     public List<Usuario> listarUsuarios() {
         return usuarioDAO.listarTodos();
     }
 
+    /**
+     * Busca usuário por username
+     */
     public Usuario buscarUsuarioPorUsername(String username) {
         return usuarioDAO.buscarPorUsername(username);
     }

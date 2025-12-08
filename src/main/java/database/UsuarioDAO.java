@@ -80,4 +80,48 @@ public class UsuarioDAO {
             em.close();
         }
     }
+
+    public boolean deletar(String username) {
+        EntityManager em = JPAUtil.getEntityManager();
+        try {
+            System.out.println("[UsuarioDAO] 🗑️ Deletando usuário (rollback): " + username);
+
+            em.getTransaction().begin();
+
+            // Busca o usuário
+            TypedQuery<Usuario> query = em.createQuery(
+                    "SELECT u FROM Usuario u WHERE u.username = :username",
+                    Usuario.class
+            );
+            query.setParameter("username", username);
+            Usuario usuario = query.getSingleResult();
+
+            // Remove
+            em.remove(usuario);
+            em.getTransaction().commit();
+
+            System.out.println("[UsuarioDAO] ✅ Usuário deletado com sucesso");
+            return true;
+
+        } catch (NoResultException e) {
+            System.out.println("[UsuarioDAO] ⚠️ Usuário não encontrado para deletar: " + username);
+
+            if (em.getTransaction().isActive()) {
+                em.getTransaction().rollback();
+            }
+            return false; // Usuário não existia
+
+        } catch (Exception e) {
+            System.err.println("[UsuarioDAO] ❌ Erro ao deletar usuário: " + e.getMessage());
+            e.printStackTrace();
+
+            if (em.getTransaction().isActive()) {
+                em.getTransaction().rollback();
+            }
+            return false;
+
+        } finally {
+            em.close();
+        }
+    }
 }

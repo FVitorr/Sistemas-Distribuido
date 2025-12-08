@@ -10,22 +10,27 @@ public class MensagemCluster implements Serializable {
         UPLOAD,
         LOCK_REQUEST,
         LOCK_RELEASE,
+        LOCK_CONCEDIDO,             // ✅ Notificação de lock concedido
         SALVAR_USUARIO,
-        REGISTER_RPC_ADDRESS // RPC address como string
+        ROLLBACK_USUARIO,
+        CONFIRMACAO_TRANSACAO,
+        REGISTER_RPC_ADDRESS
     }
 
     public Acao acao;
     public String arquivo;
     public byte[] conteudo;
     public Usuario usuario;
-    public String rpcAddress; // serializável agora
+    public String rpcAddress;
     public boolean replicado = false;
+
+    // Campos para controle de transações
+    public String transactionId;
+    public boolean sucesso;
 
     private MensagemCluster() {}
 
-    public static void log(String msg) {
-        System.out.println("[MensagemCluster] " + msg);
-    }
+    // ================== MÉTODOS DE ARQUIVO ==================
 
     public static MensagemCluster upload(String arquivo, byte[] conteudo) {
         MensagemCluster m = new MensagemCluster();
@@ -34,6 +39,8 @@ public class MensagemCluster implements Serializable {
         m.conteudo = conteudo;
         return m;
     }
+
+    // ================== MÉTODOS DE LOCK ==================
 
     public static MensagemCluster solicitarLock(String arquivo) {
         MensagemCluster m = new MensagemCluster();
@@ -49,17 +56,49 @@ public class MensagemCluster implements Serializable {
         return m;
     }
 
-    public static MensagemCluster salvarUsuario(Usuario u) {
+    /**
+     * Notificação de que lock foi concedido
+     */
+    public static MensagemCluster lockConcedido(String arquivo) {
+        MensagemCluster m = new MensagemCluster();
+        m.acao = Acao.LOCK_CONCEDIDO;
+        m.arquivo = arquivo;
+        return m;
+    }
+
+    // ================== MÉTODOS DE USUÁRIO ==================
+
+    public static MensagemCluster salvarUsuario(Usuario u, String transactionId) {
         MensagemCluster m = new MensagemCluster();
         m.acao = Acao.SALVAR_USUARIO;
         m.usuario = u;
+        m.transactionId = transactionId;
         return m;
     }
+
+    public static MensagemCluster rollbackUsuario(String username, String transactionId) {
+        MensagemCluster m = new MensagemCluster();
+        m.acao = Acao.ROLLBACK_USUARIO;
+        m.usuario = new Usuario();
+        m.usuario.setUsername(username);
+        m.transactionId = transactionId;
+        return m;
+    }
+
+    public static MensagemCluster confirmarTransacao(String transactionId, boolean sucesso) {
+        MensagemCluster m = new MensagemCluster();
+        m.acao = Acao.CONFIRMACAO_TRANSACAO;
+        m.transactionId = transactionId;
+        m.sucesso = sucesso;
+        return m;
+    }
+
+    // ================== OUTROS ==================
 
     public static MensagemCluster registerRpc(String rpcAddr) {
         MensagemCluster m = new MensagemCluster();
         m.acao = Acao.REGISTER_RPC_ADDRESS;
-        m.rpcAddress = rpcAddr; // agora é String
+        m.rpcAddress = rpcAddr;
         return m;
     }
 
@@ -70,7 +109,9 @@ public class MensagemCluster implements Serializable {
                 (arquivo != null ? ", arquivo=" + arquivo : "") +
                 (usuario != null ? ", usuario=" + usuario.getUsername() : "") +
                 (rpcAddress != null ? ", rpcAddr=" + rpcAddress : "") +
+                (transactionId != null ? ", txId=" + transactionId : "") +
                 ", replicado=" + replicado +
+                ", sucesso=" + sucesso +
                 '}';
     }
 }
