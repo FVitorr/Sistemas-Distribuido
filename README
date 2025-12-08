@@ -1,0 +1,54 @@
+LEIAME.txt
+0. Introdução
+
+Este projeto implementa um sistema distribuído composto por três componentes principais:
+
+Gateway – ponto de entrada e roteamento das requisições
+
+Controller – instâncias responsáveis pelo processamento
+
+Cliente – interface de acesso ao sistema
+
+O projeto é compatível com sistemas POSIX (GNU/Linux, macOS e Windows/Cygwin).
+
+1. Como compilar e executar
+
+O projeto inclui scripts de automação localizados na pasta scripts/, responsáveis por compilar e executar cada componente do sistema.
+
+Antes de utilizar qualquer script, é necessário conceder permissão de execução:
+
+chmod +x scripts/*.sh
+
+1.1 Compilação automática (recomendada)
+
+A compilação é feita de forma automática pelos próprios scripts de execução.
+Não é necessário compilar manualmente.
+
+Se desejar compilar manualmente, basta executar:
+
+Linux / macOS
+javac -cp .:libs/* -d out $(find src -name "*.java")
+
+Windows/Cygwin
+javac -cp .;libs/* -d out $(find src -name "*.java")
+
+2. Execução dos componentes
+
+A seguir estão os comandos para iniciar cada parte do sistema.
+Todos devem ser executados a partir da pasta raiz do projeto.
+
+2.1 Subir o Gateway
+./scripts/gateway.sh
+
+2.2 Subir instâncias do Controller
+
+Cada execução sobe uma nova instância do controlador.
+Execute quantas desejar:
+
+./scripts/controller.sh
+
+2.3 Subir o Cliente
+
+Assim como o controller, é possível abrir várias instâncias do cliente:
+
+./scripts/client.sh
