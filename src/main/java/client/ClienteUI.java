@@ -67,14 +67,12 @@ public class ClienteUI {
 
             if (ok) {
                 System.out.println("Conta criada com sucesso!");
-            } else {
-                System.out.println("Erro: usuário já existe.");
             }
-
         } catch (Exception e) {
-            System.out.println("Erro ao criar conta: " + e.getMessage());
+            System.out.println(extrairErro(e));
         }
-    }
+
+}
 
     private boolean realizarLogin() {
         System.out.println("\n=== LOGIN ===");
@@ -127,8 +125,10 @@ public class ClienteUI {
             System.out.println("\n=== MENU PRINCIPAL ===");
             System.out.println("1. Listar Arquivos");
             System.out.println("2. Upload");
-            System.out.println("3. Download");
-            System.out.println("4. Sair");
+            System.out.println("3. Editar Arquivo");
+            System.out.println("4. Download");
+            System.out.println("5. Apagar");
+            System.out.println("6. Sair");
 
             System.out.print("Escolha: ");
             String opc = scanner.nextLine();
@@ -136,12 +136,28 @@ public class ClienteUI {
             switch (opc) {
                 case "1" -> listarArquivos();
                 case "2" -> upload();
-                case "3" -> download();
-                case "4" -> System.exit(0);
+                case "3" -> editarArquivo();
+                case "4" -> download();
+                case "5" -> apagar();
+                case "6" -> System.exit(0);
                 default -> System.out.println("Opção inválida.");
             }
 
             mostrarHashRodape();
+        }
+    }
+
+    private void apagar() {
+        try {
+            System.out.print("Nome do arquivo: ");
+            String nome = scanner.nextLine();
+
+            boolean ok = gateway.apagar(nome);
+
+            System.out.println(ok ? "Arquivo apagado!" : "Erro ao apagar arquivo.");
+
+        } catch (Exception e) {
+            System.out.println("Erro ao apagar arquivo");
         }
     }
 
@@ -152,6 +168,23 @@ public class ClienteUI {
             arquivos.forEach(System.out::println);
         } catch (Exception e) {
             System.out.println("Erro ao listar arquivos");
+        }
+    }
+
+    private void editarArquivo(){
+        try {
+            System.out.print("Nome do arquivo: ");
+            String nome = scanner.nextLine();
+
+            System.out.print("Conteúdo: ");
+            String conteudo = "\n" + scanner.nextLine();
+
+            boolean ok = gateway.editaArquivo(nome, conteudo.getBytes());
+
+            System.out.println(ok ? "Upload feito!" : "Erro no upload.");
+
+        } catch (Exception e) {
+            System.out.println("Erro no upload");
         }
     }
 
@@ -198,4 +231,15 @@ public class ClienteUI {
             System.out.println("\n[HASH SISTEMA]: " + hash);
         } catch (Exception ignored) {}
     }
+
+    private String extrairErro(Exception e) {
+        Throwable causa = e;
+
+        while (causa.getCause() != null) {
+            causa = causa.getCause();
+        }
+
+        return causa.getMessage();
+    }
+
 }

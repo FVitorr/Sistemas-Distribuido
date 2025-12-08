@@ -79,7 +79,11 @@ public class DadosServer {
      * Salva novo usuário (usa persist)
      */
     public boolean salvarUsuario(Usuario usuario) {
-        return usuarioDAO.salvar(usuario);
+        try{
+            return usuarioDAO.salvar(usuario);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -116,5 +120,15 @@ public class DadosServer {
      */
     public Usuario buscarUsuarioPorUsername(String username) {
         return usuarioDAO.buscarPorUsername(username);
+    }
+
+    public boolean deletarArquivo(String nome) {
+        try {
+            Path caminho = Paths.get(diretorio, nome);
+            return Files.deleteIfExists(caminho);
+        } catch (IOException e) {
+            System.err.println("Erro ao deletar arquivo: " + e.getMessage());
+            return false;
+        }
     }
 }

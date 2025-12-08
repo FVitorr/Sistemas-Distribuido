@@ -17,4 +17,8 @@ public interface GatewayService extends Remote {
     String getSistemaHash() throws RemoteException;
 
     boolean criarConta(String username, String password) throws RemoteException;
+
+    boolean editaArquivo(String nomeArquivo, byte[] conteudo) throws RemoteException;
+
+    boolean apagar(String nome)  throws RemoteException;
 }

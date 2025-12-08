@@ -1,16 +1,21 @@
 package server;
 
 import model.Usuario;
+import org.jgroups.Address;
+
 import java.io.Serializable;
+import java.util.UUID;
 
 public class MensagemCluster implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public enum Acao {
         UPLOAD,
+        CONFIRMACAO_UPLOAD,      // ✅ Confirmação de upload recebido
+        ROLLBACK_UPLOAD,         // ✅ Desfazer upload
         LOCK_REQUEST,
         LOCK_RELEASE,
-        LOCK_CONCEDIDO,             // ✅ Notificação de lock concedido
+        LOCK_CONCEDIDO,
         SALVAR_USUARIO,
         ROLLBACK_USUARIO,
         CONFIRMACAO_TRANSACAO,
@@ -18,11 +23,14 @@ public class MensagemCluster implements Serializable {
     }
 
     public Acao acao;
+    public String uuid;              // ✅ ID do arquivo (se necessário)
+    public String uploadId;          // ✅ ID para rastreamento de upload
     public String arquivo;
     public byte[] conteudo;
     public Usuario usuario;
     public String rpcAddress;
     public boolean replicado = false;
+    public String serverOrigin = null;
 
     // Campos para controle de transações
     public String transactionId;
@@ -32,11 +40,38 @@ public class MensagemCluster implements Serializable {
 
     // ================== MÉTODOS DE ARQUIVO ==================
 
-    public static MensagemCluster upload(String arquivo, byte[] conteudo) {
+    /**
+     * Upload de arquivo com ID para rastreamento
+     */
+    public static MensagemCluster upload(String arquivo, byte[] conteudo, String uploadId, Address serverOrigin) {
         MensagemCluster m = new MensagemCluster();
         m.acao = Acao.UPLOAD;
         m.arquivo = arquivo;
         m.conteudo = conteudo;
+        m.uploadId = uploadId;  // ✅ Usa uploadId para rastrear confirmações
+        m.serverOrigin = serverOrigin.toString();
+        return m;
+    }
+
+    /**
+     * Confirmação de que o upload foi recebido e salvo
+     */
+    public static MensagemCluster confirmarUpload(String uploadId, boolean sucesso) {
+        MensagemCluster m = new MensagemCluster();
+        m.acao = Acao.CONFIRMACAO_UPLOAD;
+        m.uploadId = uploadId;
+        m.sucesso = sucesso;
+        return m;
+    }
+
+    /**
+     * Rollback de upload (desfazer em todas as réplicas)
+     */
+    public static MensagemCluster rollbackUpload(String arquivo, String uploadId) {
+        MensagemCluster m = new MensagemCluster();
+        m.acao = Acao.ROLLBACK_UPLOAD;
+        m.arquivo = arquivo;
+        m.uploadId = uploadId;
         return m;
     }
 
@@ -107,6 +142,7 @@ public class MensagemCluster implements Serializable {
         return "MensagemCluster{" +
                 "acao=" + acao +
                 (arquivo != null ? ", arquivo=" + arquivo : "") +
+                (uploadId != null ? ", uploadId=" + uploadId : "") +
                 (usuario != null ? ", usuario=" + usuario.getUsername() : "") +
                 (rpcAddress != null ? ", rpcAddr=" + rpcAddress : "") +
                 (transactionId != null ? ", txId=" + transactionId : "") +

@@ -66,6 +66,16 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
         atualizarListaServidores();
     }
 
+    private Exception unwrap(Throwable e) {
+        Throwable cause = e;
+
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+
+        if (cause instanceof Exception) return (Exception) cause;
+        return new Exception(cause);
+    }
 
 
     private void log(String msg) {
@@ -103,23 +113,22 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
         RequestOptions opts = new RequestOptions(ResponseMode.GET_FIRST, 5000);
         MethodCall call = new MethodCall(nomeMetodo, args, tipos);
 
-        // ✅ USE callRemoteMethod (SINGULAR) para chamar apenas 1 servidor
-        Object resposta = dispatcher.callRemoteMethod(
-                servidor,  // ✅ Um endereço específico
-                call,
-                opts
-        );
+        try {
+            return dispatcher.callRemoteMethod(servidor, call, opts);
 
-        log("📨 Resposta recebida de: " + servidor);
-
-        return resposta;
+        } catch (Exception e) {
+            Exception real = unwrap(e);
+            log("❌ Erro recebido do servidor: \n" + real);
+            throw real;
+        }
     }
+
 
     /**
      * Retry automático em caso de falha
      */
     private Object chamarComRetry(String metodo, Object[] args, Class[] tipos, int maxTentativas)
-            throws RemoteException {
+            throws Exception {
 
         Exception ultimoErro = null;
 
@@ -131,8 +140,11 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
                 log("⚠️ Tentativa " + (i + 1) + "/" + maxTentativas + " falhou: " + e.getMessage());
 
                 if (i < maxTentativas - 1) {
-                    // Remove servidor problemático temporariamente
                     atualizarListaServidores();
+                }
+
+                if (e.getMessage().contains("[LOCAL]")) {
+                    throw new RemoteException(e.getMessage());
                 }
             }
         }
@@ -195,6 +207,25 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
     }
 
     @Override
+    public boolean editaArquivo(String nomeArquivo, byte[] conteudo) throws RemoteException {
+        log("📥 EDITA ARQUIVO: " + nomeArquivo + " (" + conteudo.length + " bytes)");
+
+        try {
+            Boolean resultado = (Boolean) chamarComRetry(
+                    "editaArquivo",
+                    new Object[]{nomeArquivo, conteudo},
+                    new Class[]{String.class, byte[].class},
+                    3
+            );
+            return resultado != null && resultado;
+
+        } catch (Exception e) {
+            throw new RemoteException("Erro no upload", e);
+        }
+    }
+
+
+    @Override
     public byte[] download(String nomeArquivo) throws RemoteException {
         log("📥 DOWNLOAD: " + nomeArquivo);
 
@@ -231,6 +262,9 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
         log("📥 CRIAR CONTA: " + user);
 
         try {
+            if (user == null || user.isEmpty() || pass == null || pass.isEmpty()) {
+                throw new RemoteException("Nome de Usuario e Senha não podem ser vazios");
+            }
             Boolean resultado = (Boolean) chamarComRetry(
                     "salvarUsuario",
                     new Object[]{new Usuario(user, pass)},
@@ -241,6 +275,24 @@ public class GatewayServer implements GatewayService, Receiver, Closeable {
 
         } catch (Exception e) {
             throw new RemoteException("Erro ao criar conta", e);
+        }
+    }
+
+    @Override
+    public boolean apagar(String nome) throws RemoteException {
+        log("📥 APAGAR ARQUIVO: " + nome);
+
+        try {
+            Boolean resultado = (Boolean) chamarComRetry(
+                    "apagar",
+                    new Object[]{nome},
+                    new Class[]{String.class},
+                    3
+            );
+            return resultado != null && resultado;
+
+        } catch (Exception e) {
+            throw new RemoteException("Erro ao apagar arquivo", e);
         }
     }
 
