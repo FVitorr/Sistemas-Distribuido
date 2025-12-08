@@ -1,36 +1,27 @@
-LEIAME.txt
-0. Introdução
+# Sistema Distribuído – Guia Completo de Compilação e Execução
 
-Este projeto implementa um sistema distribuído composto por três componentes principais:
+## 0. Introdução
 
-Gateway – ponto de entrada e roteamento das requisições
+Este projeto implementa um **sistema distribuído** composto por três componentes principais:
 
-Controller – instâncias responsáveis pelo processamento
+- **Gateway** → ponto único de entrada e responsável pelo roteamento das requisições
+- **Controller** → instâncias responsáveis pelo processamento real das tarefas
+- **Cliente** → interface de linha de comando para interação com o sistema
 
-Cliente – interface de acesso ao sistema
+O projeto é totalmente compatível com sistemas **POSIX**, ou seja:
 
-O projeto é compatível com sistemas POSIX (GNU/Linux, macOS e Windows/Cygwin).
+- GNU/Linux
+- macOS
+- Windows (via Cygwin ou WSL)
 
-1. Como compilar e executar
+## 1. Como compilar e executar
 
-O projeto inclui scripts de automação localizados na pasta scripts/, responsáveis por compilar e executar cada componente do sistema.
+Todo o processo de compilação e execução é automatizado por meio de scripts localizados na pasta **`scripts/`**.
 
-Antes de utilizar qualquer script, é necessário conceder permissão de execução:
+### Permissão de execução dos scripts (executar apenas uma vez)
 
+```bash
 chmod +x scripts/*.sh
-
-1.1 Compilação automática (recomendada)
-
-A compilação é feita de forma automática pelos próprios scripts de execução.
-Não é necessário compilar manualmente.
-
-Se desejar compilar manualmente, basta executar:
-
-Linux / macOS
-javac -cp .:libs/* -d out $(find src -name "*.java")
-
-Windows/Cygwin
-javac -cp .;libs/* -d out $(find src -name "*.java")
 
 2. Execução dos componentes
 
